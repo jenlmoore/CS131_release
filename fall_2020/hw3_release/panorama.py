@@ -5,6 +5,8 @@ Author: Donsuk Lee (donlee90@stanford.edu)
 Date created: 09/2017
 Last modified: 09/27/2018
 Python Version: 3.5+
+
+Completed by: Jennifer Moore (jlmoore@stanford.edu)
 """
 
 import numpy as np
@@ -44,9 +46,15 @@ def harris_corners(img, window_size=3, k=0.04):
     dy = filters.sobel_h(img)
 
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
-
+    mx = convolve(dx **2, window, mode='constant', cval=0)
+    my = convolve(dy **2, window, mode='constant', cval=0)
+    mxy = convolve(dx * dy, window, mode='constant', cval=0)
+    
+    for r in range(H):
+        for c in range(W):
+            M = [[mx[r,c], mxy[r, c]],[mxy[r, c], my[r,c]]]
+            response[r, c] = np.linalg.det(M) - (k * (np.trace(M)**2))
+               
     return response
 
 
@@ -70,8 +78,13 @@ def simple_descriptor(patch):
     """
     feature = []
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    
+    no_mean_patch = patch - np.mean(patch)
+    if (np.std(patch) != 0):
+        feature = (no_mean_patch / np.std(patch)).flatten()
+    else:
+        feature = no_mean_patch.flatten()
+    
     return feature
 
 
@@ -125,8 +138,13 @@ def match_descriptors(desc1, desc2, threshold=0.5):
     dists = cdist(desc1, desc2)
 
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    for r in range(M):
+        dist = dists[r, :]
+        sort = np.sort(dist)
+        if (sort[0]/sort[1] <= threshold):
+            matches.append([r, np.argmin(dist)])
+    
+    matches = np.asarray(matches).reshape(-1, 2)
 
     return matches
 
@@ -158,7 +176,7 @@ def fit_affine_matrix(p1, p2):
     p2 = pad(p2)
 
     ### YOUR CODE HERE
-    pass
+    H = np.linalg.lstsq(p2, p1, rcond=None)[0]
     ### END YOUR CODE
 
     # Sometimes numerical issues cause least-squares to produce the last
@@ -217,13 +235,31 @@ def ransac(keypoints1, keypoints2, matches, n_iters=200, threshold=20):
     n_inliers = 0
 
     # RANSAC iteration start
-    
     # Note: while there're many ways to do random sampling, please use `np.random.shuffle()`
     # followed by slicing out the first `n_samples` matches here in order to align with the auto-grader.
-    
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    for i in range(n_iters):
+        cur_inliers = np.zeros(N, dtype=bool)
+        # Randomly sample n_sample points
+        np.random.shuffle(matches)
+        samples = matches[:n_samples]
+        sample1 = pad(keypoints1[samples[:,0]])
+        sample2 = pad(keypoints2[samples[:,1]])
+        
+        H = np.linalg.lstsq(sample2, sample1, rcond=None)[0]
+        H[:, 2] = np.array([0, 0, 1])
+        
+        #did manual euclidean distance formula bc needed it in correct array format
+        cur_inliers = np.sqrt(np.sum((matched2.dot(H) - matched1) ** 2,  axis=-1)) < threshold
+        
+        n_c_inliers = np.sum(cur_inliers)
+        if n_c_inliers >= n_inliers:
+            max_inliers = cur_inliers
+            n_inliers = n_c_inliers
+            
+    H = np.linalg.lstsq(matched2[max_inliers], matched1[max_inliers], rcond=None)[0]
+    H[:, 2] = np.array([0, 0, 1])
+        
+         
     print(H)
     return H, orig_matches[max_inliers]
 
@@ -273,10 +309,17 @@ def hog_descriptor(patch, pixels_per_cell=(8,8)):
     cells = np.zeros((rows, cols, n_bins))
 
     # Compute histogram per cell
-    ### YOUR CODE HERE
-    pass
-    ### YOUR CODE HERE
-
+    
+    for r in range(rows):
+        for c in range(cols):
+            for rpixel in range(G_cells[r][c].shape[0]):
+                for cpixel in range(G_cells[r][c].shape[1]):
+                    binNum = int(theta_cells[r, c, rpixel, cpixel] / degrees_per_bin) % n_bins
+                    #adds gradient in direction binNum at the cell histogram
+                    cells[r, c, binNum] += G_cells[r][c][rpixel][cpixel]
+    block = cells.flatten()
+    block /= np.linalg.norm(block)
+                 
     return block
 
 
@@ -310,7 +353,22 @@ def linear_blend(img1_warped, img2_warped):
     left_margin = np.argmax(img2_mask[out_H//2, :].reshape(1, out_W), 1)[0]
 
     ### YOUR CODE HERE
-    pass
+    #start same initially
+    weight_1 = np.ones_like(img1_warped)
+    weight_2 = np.ones_like(img2_warped)
+    
+    #in normal margin spots
+    if left_margin < right_margin:
+        weight_1[:, right_margin:] = 0
+        weight_2[:, :left_margin] = 0
+        distance = right_margin-left_margin
+        weight_1[:, left_margin: right_margin] = np.linspace(1, 0, distance)
+        weight_2[:, left_margin: right_margin] = np.linspace(0, 1, distance)
+    
+    newimg1 = weight_1 * img1_warped
+    newimg2 = weight_2 * img2_warped
+    merged = newimg1 + newimg2
+    
     ### END YOUR CODE
 
     return merged
@@ -351,7 +409,34 @@ def stitch_multiple_images(imgs, desc_func=simple_descriptor, patch_size=5):
         matches.append(mtchs)
 
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    #transformations
+    H_trans = [np.eye(3)]
+    for i in range(len(imgs) - 1):
+        #get affine matrix and add
+        H_trans.append(ransac(keypoints[i], keypoints[i + 1], matches[i], threshold=1)[0])
+        
+    #calc for each pic
+    for i in range(1, len(imgs)):
+        H_trans[i] = H_trans[i].dot(H_trans[i - 1])
+        
+    output_shape, offset = get_output_space(imgs[0], imgs[1:], H_trans[1:])
+    warpedImgs = []
+    for i in range(len(imgs)):
+        warpedImgs.append(warp_image(imgs[i], H_trans[i], output_shape, offset))
+        img_mask = (warpedImgs[-1] != -1)
+        warpedImgs[-1][~img_mask] = 0
+        
+        #WIthout linear blend, last image gets messed up
+        #pano_mask = (panorama != -1)
+        #panorama[~pano_mask] = 0
+        #panorama += warpedImgs[-1]
+        # Track the overlap by adding the masks together
+        #overlap = (pano_mask * 1.0 + img_mask)
+        # Normalize through division by `overlap` - but ensure the minimum is 1
+        #panorama /= np.maximum(overlap, 1)
+        
+    panorama = warpedImgs[0]
+    for i in range(1, len(imgs)):
+        panorama = linear_blend(panorama, warpedImgs[i])
 
     return panorama

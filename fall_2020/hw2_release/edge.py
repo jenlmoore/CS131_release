@@ -5,6 +5,8 @@ Author: Donsuk Lee (donlee90@stanford.edu)
 Date created: 07/2017
 Last modified: 10/18/2017
 Python Version: 3.5+
+
+Completed by: Jennifer Moore (jlmoore@stanford.edu)
 """
 
 import numpy as np
@@ -36,8 +38,12 @@ def conv(image, kernel):
     padded = np.pad(image, pad_width, mode='edge')
 
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    flip_kernel = np.flip(np.flip(kernel, 0), 1)
+    for r in range(Hi):
+        for c in range(Wi):
+            total = np.sum(flip_kernel * padded[r: r+Hk, c: c+Wk]) 
+            out[r, c] = total
+    
 
     return out
 
@@ -61,9 +67,12 @@ def gaussian_kernel(size, sigma):
     kernel = np.zeros((size, size))
 
     ### YOUR CODE HERE
-    pass
+    k = (size - 1) / 2;
+    for i in range(size):
+        for j in range(size):
+            kernel[i, j] = (1/(2 * np.pi * (sigma **2))) * np.exp(-((i-k)**2 + (j-k)**2)/ float(2 * (sigma**2)))           
+           
     ### END YOUR CODE
-
     return kernel
 
 def partial_x(img):
@@ -81,9 +90,8 @@ def partial_x(img):
     out = None
 
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
-
+    x_kern = 1/2 *np.array([1, 0, -1]).reshape((1, 3))
+    out = conv(img, x_kern)
     return out
 
 def partial_y(img):
@@ -101,9 +109,8 @@ def partial_y(img):
     out = None
 
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
-
+    y_kern = 1/2 * np.array([1, 0, -1]).reshape((3, 1))
+    out = conv(img, y_kern)
     return out
 
 def gradient(img):
@@ -123,11 +130,15 @@ def gradient(img):
     """
     G = np.zeros(img.shape)
     theta = np.zeros(img.shape)
-
+    
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
-
+    grad_x = partial_x(img)
+    grad_y = partial_y(img)
+    
+    G = np.sqrt((grad_x**2) + (grad_y**2))
+    #arc tan gives radians from -pi to pi, conver 360degrees to 0 degrees bc they are equal
+    
+    theta = np.rad2deg(np.arctan2(grad_y, grad_x)) % 360
     return G, theta
 
 
@@ -146,14 +157,55 @@ def non_maximum_suppression(G, theta):
     """
     H, W = G.shape
     out = np.zeros((H, W))
+       
 
     # Round the gradient direction to the nearest 45 degrees
     theta = np.floor((theta + 22.5) / 45) * 45
-
-    #print(G)
+ 
     ### BEGIN YOUR CODE
-    pass
-    ### END YOUR CODE
+    theta = theta % 360
+    
+    for r in range(H):
+        for c in range(W):
+            degree = theta[r, c]
+        
+            if degree == 0 or degree == 180:
+                if c == 0:
+                    points = [G[r, c+1]]
+                elif c == W-1:
+                    points = [G[r, c-1]]
+                else:
+                    points = [G[r, c-1], G[r, c+1]]
+            elif degree == 45 or degree == 225:
+                if (c == 0 and r == H-1) or (r == 0 and c == W-1):
+                    points = [G[r, c]]
+                elif r == 0 or c == 0:
+                    points = [G[r+1, c+1]]
+                elif r == H-1 or c == W-1:
+                    points = [G[r-1, c-1]]
+                else:
+                    points = [G[r-1, c-1], G[r+1, c+1]]
+            elif degree == 90 or degree == 270:
+                if r == 0:
+                    points = [G[r+1, c]]
+                elif r == H-1:
+                    points = [G[r-1, c]]
+                else:
+                    points = [G[r-1, c], G[r+1, c]]
+            elif degree == 135 or degree == 315:
+                if (c == 0 and r == 0) or (c == W-1 and r == H-1):
+                    points = [G[r, c]]
+                elif r == 0 or c == W-1:
+                    points = [G[r+1, c-1]]
+                elif c == 0 or r == H-1:
+                    points = [G[r-1, c+1]]
+                else:
+                    points = [G[r-1, c+1], G[r+1, c-1]]
+          
+            # if its on one of edges, only compare to one point
+            if G[r, c] >= np.max(points):
+                out[r, c] = G[r, c];
+            
 
     return out
 
@@ -177,7 +229,16 @@ def double_thresholding(img, high, low):
     weak_edges = np.zeros(img.shape, dtype=np.bool)
 
     ### YOUR CODE HERE
-    pass
+    strong_edges = img > high
+    weak_edges = (img < high) & (img > low)
+    '''
+    for r in range(img.shape[0]):
+        for c in range(img.shape[1]):
+            if img[r, c] > high:
+                strong_edges[r,c] = True
+            elif img[r, c] > low:
+                weak_edges[r, c] = True
+'''
     ### END YOUR CODE
 
     return strong_edges, weak_edges
@@ -232,12 +293,45 @@ def link_edges(strong_edges, weak_edges):
 
     # Make new instances of arguments to leave the original
     # references intact
-    weak_edges = np.copy(weak_edges)
+    weak_edge = np.copy(weak_edges)
     edges = np.copy(strong_edges)
 
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    toExplore = []
+    visited = np.zeros(edges.shape)
+    toExplore.append((0,0))
+    '''
+    while len(toExplore) != 0:
+        cur_r, cur_c = toExplore.pop(0)
+        #print(cur_r, cur_c)
+        if visited[cur_r, cur_c]:
+            continue
+            
+        visited[cur_r, cur_c] = True
+        
+        possible_links = get_neighbors(cur_r, cur_c, H, W)
+  
+        for x in possible_links:
+            if visited[x] == False:
+                toExplore.append(x)
+            if (weak_edge[cur_r, cur_c] == True and edges[x] == True):
+                edges[cur_r, cur_c] = True
+                '''
+    for i in indices:
+        possible_links = get_neighbors(i[0], i[1], H, W)
+        while len(possible_links) != 0:
+            cur_r, cur_c = possible_links.pop(0)
+            #print(cur_r, cur_c)
+            if visited[cur_r, cur_c]:
+                continue
+
+            visited[cur_r, cur_c] = True
+            connections = get_neighbors(cur_r, cur_c, H, W)
+            for x in connections:
+                if visited[x] == False and weak_edges[cur_r, cur_c]:
+                    possible_links.append(x)
+                if (weak_edge[cur_r, cur_c] == True and edges[i[0], i[1]] == True):
+                    edges[cur_r, cur_c] = True
 
     return edges
 
@@ -254,8 +348,14 @@ def canny(img, kernel_size=5, sigma=1.4, high=20, low=15):
         edge: numpy array of shape(H, W).
     """
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    
+    kernel = gaussian_kernel(kernel_size, sigma)
+    smoothed_img = conv(img, kernel)
+    G, theta = gradient(smoothed_img)
+    nms = non_maximum_suppression(G, theta)
+    
+    strong, weak = double_thresholding(nms, high, low)
+    edge = link_edges(strong, weak)
 
     return edge
 
@@ -276,7 +376,7 @@ def hough_transform(img):
         thetas: numpy array of shape (n, ).
     """
     # Set rho and theta ranges
-    W, H = img.shape
+    H, W = img.shape
     diag_len = int(np.ceil(np.sqrt(W * W + H * H)))
     rhos = np.linspace(-diag_len, diag_len, diag_len * 2 + 1)
     thetas = np.deg2rad(np.arange(-90.0, 90.0))
@@ -294,7 +394,13 @@ def hough_transform(img):
     # Find rho corresponding to values in thetas
     # and increment the accumulator in the corresponding coordiate.
     ### YOUR CODE HERE
-    pass
+    
+    #loop through useful points that are non 0
+    for r, c in zip(ys, xs):
+        for index in range(num_thetas):
+            rho = r * sin_t[index] + c * cos_t[index]
+            accumulator[round(rho + diag_len), index] += 1
+    
     ### END YOUR CODE
 
     return accumulator, rhos, thetas

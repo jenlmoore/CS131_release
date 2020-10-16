@@ -1,4 +1,5 @@
 import numpy as np
+import math as math
 
 
 def dot_product(a, b):
@@ -14,8 +15,10 @@ def dot_product(a, b):
     Returns:
         out: numpy array of shape (x, x) (scalar if x = 1)
     """
+    
     out = None
     ### YOUR CODE HERE
+    out = np.dot(a, b)
     pass
     ### END YOUR CODE
     return out
@@ -37,6 +40,9 @@ def complicated_matrix_function(M, a, b):
     """
     out = None
     ### YOUR CODE HERE
+    ab = dot_product(a, b)
+    MaT = dot_product(M, a.T)
+    out = ab * MaT
     pass
     ### END YOUR CODE
 
@@ -58,6 +64,7 @@ def eigen_decomp(M):
     w = None
     v = None
     ### YOUR CODE HERE
+    w, v = np.linalg.eig(M)
     pass
     ### END YOUR CODE
     return w, v
@@ -88,8 +95,14 @@ def euclidean_distance_native(u, v):
     #     sum.
 
     ### YOUR CODE HERE
+    out = 0
+    
+    for one, two in zip(u, v):
+        diff = one - two
+        out += diff ** 2
     pass
     ### END YOUR CODE
+    return math.sqrt(out)
 
 
 def euclidean_distance_numpy(u, v):
@@ -120,9 +133,12 @@ def euclidean_distance_numpy(u, v):
     #     sum.
 
     ### YOUR CODE HERE
+    diff = u - v;
+    squared = np.square(diff)
+    out = np.sqrt(np.sum(squared))
     pass
     ### END YOUR CODE
-
+    return out
 
 def get_eigen_values_and_vectors(M, k):
     """Return top k eigenvalues and eigenvectors of matrix M. By top k
@@ -144,6 +160,13 @@ def get_eigen_values_and_vectors(M, k):
     eigenvalues = []
     eigenvectors = []
     ### YOUR CODE HERE
+    w, v = eigen_decomp(M)
+    wsort = np.argsort(np.abs(w))
+    largest_indices = wsort[::-1]
+    
+    for x in range(0, k):
+        eigenvalues.append(w[largest_indices[x]])
+        eigenvectors.append(v[:,(largest_indices[x])])
     pass
     ### END YOUR CODE
     return eigenvalues, eigenvectors
