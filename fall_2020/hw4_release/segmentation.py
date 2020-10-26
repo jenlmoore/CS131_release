@@ -44,9 +44,13 @@ def kmeans(features, k, num_iters=100):
     assignments = np.zeros(N, dtype=np.uint32)
 
     for n in range(num_iters):
-        ### YOUR CODE HERE
-        pass
-        ### END YOUR CODE
+        for r in range(N):
+            assignments[r] = np.argmin(np.sum((features[r] - centers)**2, axis=1))
+        prevCenter = np.copy(centers)
+        for c in range(k):
+            centers[c] = np.mean(features[assignments == c], axis=0)
+        if np.allclose(prevCenter, centers):
+            break
 
     return assignments
 
@@ -80,9 +84,16 @@ def kmeans_fast(features, k, num_iters=100):
     assignments = np.zeros(N, dtype=np.uint32)
 
     for n in range(num_iters):
-        ### YOUR CODE HERE
-        pass
-        ### END YOUR CODE
+        ### make element wise comparable
+        rptfeature = np.tile(features, (k, 1))
+        rptcenter = np.repeat(centers, N, axis=0)
+        
+        assignments = np.argmin(np.sum((rptfeature - rptcenter)**2, axis=1).reshape(k, N), axis=0)
+        prevCenter = np.copy(centers)
+        for c in range(k):
+            centers[c] = np.mean(features[assignments == c], axis=0)
+        if np.allclose(prevCenter, centers):
+            break
 
     return assignments
 
@@ -135,9 +146,26 @@ def hierarchical_clustering(features, k):
     n_clusters = N
 
     while n_clusters > k:
-        ### YOUR CODE HERE
-        pass
-        ### END YOUR CODE
+        distances = ((centers.reshape(-1, 1, D) - centers.reshape(1, -1, D)) ** 2).sum(axis=-1)
+        distances[distances==0] = float('inf')
+        minDist = np.argmin(distances)
+        
+        #newcluster
+        min1 = minDist // n_clusters
+        #old
+        min2 = minDist - min1 * n_clusters
+        
+        #just in case other case
+        if min2 < min1:
+            min1, min2 = min2, min1
+        assignments[assignments == min2] = min1
+        assignments[assignments > min2] -= 1
+        
+        #delete the merged cluster center
+        centers = np.delete(centers, min2, axis = 0)
+        #reset the center at min1
+        centers[min1] = np.mean(features[assignments == min1], axis = 0)
+        n_clusters -= 1
 
     return assignments
 
@@ -156,9 +184,7 @@ def color_features(img):
     img = img_as_float(img)
     features = np.zeros((H*W, C))
 
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    features = img.reshape(H*W, C)
 
     return features
 
@@ -185,10 +211,13 @@ def color_position_features(img):
     color = img_as_float(img)
     features = np.zeros((H*W, C+2))
 
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
-
+    #sets color
+    features[:, 0 : C] = color.reshape(H*W, C)
+    #puts in locations
+    locations = np.dstack(np.mgrid[0 : H, 0 : W]).reshape((H*W, 2))
+    features[:, C : C + 2] = locations
+    
+    features = (features - np.mean(features, axis=0)) / np.std(features, axis=0)
     return features
 
 def my_features(img):
@@ -226,8 +255,9 @@ def compute_accuracy(mask_gt, mask):
 
     accuracy = None
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    H, W = mask_gt.shape
+    #just divide num where they equal by total num
+    accuracy = np.sum(mask_gt == mask) / (H * W)
 
     return accuracy
 
