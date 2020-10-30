@@ -5,6 +5,8 @@ Author: Donsuk Lee (donlee90@stanford.edu)
 Date created: 09/2017
 Last modified: 10/16/2020
 Python Version: 3.5+
+
+Completed By: Jennifer Moore (jlmoore@stanford.edu)
 """
 
 import numpy as np
@@ -29,9 +31,8 @@ def energy_function(image):
     out = np.zeros((H, W))
     gray_image = color.rgb2gray(image)
 
-    ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    d = np.gradient(gray_image)
+    out = np.abs(d[0]) + np.abs(d[1])
 
     return out
 
@@ -80,7 +81,21 @@ def compute_cost(image, energy, axis=1):
     paths[0] = 0  # we don't care about the first row of paths
 
     ### YOUR CODE HERE
-    pass
+    for r in range(1, H):
+        cM = cost[r-1][0:W].reshape(1,W)
+        cL = np.full((1,W), np.inf)
+        cL[0][1:W] = cost[r-1][0:W-1]
+        cR = np.full((1,W), np.inf)
+        cR[0][0:W-1] = cost[r-1][1:W]
+        
+        if axis == 0:
+            matrix = np.column_stack((cL.T, cM.T, cR.T))
+        else:
+            matrix = np.row_stack((cL, cM, cR))
+        indices = np.argmin(matrix, np.abs(axis - 1))
+       
+        cost[r] = energy[r] + np.min(matrix, np.abs(axis - 1))
+        paths[r] = indices - 1
     ### END YOUR CODE
 
     if axis == 0:
@@ -118,7 +133,11 @@ def backtrack_seam(paths, end):
     seam[H-1] = end
 
     ### YOUR CODE HERE
-    pass
+    #start at bottom (r+1), goes up until 0
+    for r in range(H-2, -1, -1):
+        prevCol = seam[r+1]
+        #paths changes the index based on correct column (-1, 0, 1)
+        seam[r] = prevCol + paths[r+1, prevCol]
     ### END YOUR CODE
 
     # Check that seam only contains values in [0, W-1]
@@ -148,7 +167,14 @@ def remove_seam(image, seam):
     out = None
     H, W, C = image.shape
     ### YOUR CODE HERE
-    pass
+    out = np.zeros((H, W-1, C))
+  
+    for r in range(H):
+        mask = np.ones((W), dtype=bool)
+        mask[seam[r]] = False
+        out[r] = image[r][mask]
+    out = out.astype(image.dtype)
+    
     ### END YOUR CODE
     out = np.squeeze(out)  # remove last dimension if C == 1
 
@@ -196,7 +222,15 @@ def reduce(image, size, axis=1, efunc=energy_function, cfunc=compute_cost, bfunc
     assert size > 0, "Size must be greater than zero"
 
     ### YOUR CODE HERE
-    pass
+    while W > size: 
+        # have to recalc each time
+        energy = efunc(out)
+        cost, paths = cfunc(out, energy)
+        #gets smallest col of the bottom to start from
+        end = np.argmin(cost[-1])
+        seam = bfunc(paths, end)
+        out = rfunc(out, seam)
+        W = out.shape[1]
     ### END YOUR CODE
 
     assert out.shape[1] == size, "Output doesn't have the right shape"
@@ -223,7 +257,18 @@ def duplicate_seam(image, seam):
     H, W, C = image.shape
     out = np.zeros((H, W + 1, C))
     ### YOUR CODE HERE
-    pass
+    for r in range(H):
+        newRow = np.zeros((W+1, C))
+        s = seam[r]
+        #copy up to and including seam
+        newRow[:s] = image[r][:s]
+        #copy seam in next spot
+        newRow[s:s+2] = image[r][s]
+        #copy rest in spot after
+        if s+1 < W:
+            newRow[s+2:] = image[r][s+1:]
+        out[r] = newRow
+        
     ### END YOUR CODE
 
     return out
@@ -262,9 +307,17 @@ def enlarge_naive(image, size, axis=1, efunc=energy_function, cfunc=compute_cost
     W = out.shape[1]
 
     assert size > W, "size must be greather than %d" % W
-
     ### YOUR CODE HERE
-    pass
+    # practically same as reduce but instead enlarge
+    while W < size: 
+        # have to recalc each time
+        energy = efunc(out)
+        cost, paths = cfunc(out, energy)
+        #gets smallest col of the bottom to start from
+        end = np.argmin(cost[-1])
+        seam = bfunc(paths, end)
+        out = dfunc(out, seam)
+        W = out.shape[1]
     ### END YOUR CODE
 
     if axis == 0:
@@ -345,9 +398,6 @@ def find_seams(image, k, axis=1, efunc=energy_function, cfunc=compute_cost, bfun
         # We remove the indices used by the seam, so that `indices` keep the same shape as `image`
         indices = rfunc(indices, seam)
 
-    if axis == 0:
-        seams = np.transpose(seams, (1, 0))
-
     return seams
 
 
@@ -381,6 +431,7 @@ def enlarge(image, size, axis=1, efunc=energy_function, cfunc=compute_cost, dfun
 
     out = np.copy(image)
     # Transpose for height resizing
+    print(out.shape)
     if axis == 0:
         out = np.transpose(out, (1, 0, 2))
 
@@ -391,8 +442,26 @@ def enlarge(image, size, axis=1, efunc=energy_function, cfunc=compute_cost, dfun
     assert size <= 2 * W, "size must be smaller than %d" % (2 * W)
 
     ### YOUR CODE HERE
-    pass
-    ### END YOUR CODE
+    #get seams
+    seams = find_seams(image, size-W, axis, efunc, cfunc, bfunc, rfunc)
+    
+    for s in range(size-W):
+        seam = np.where(seams.flatten() == s+1)[0]
+        dseam = np.where(seams == s+1)[1]
+        
+        out = dfunc(out, dseam)
+        nseams = np.insert(seams, seam, 0)
+        seams = nseams.reshape((H, seams.shape[1]+1))
+        
+    #first try, maybe above is for fast?
+    #for s in range(size-W):
+        #r, seam = np.where(seams == s+1)
+        #out = dfunc(out, seam)
+        #nseams = np.insert(seams[0], seam[0]+1, 0)
+        #for row in range(1, H):
+            #nseams = np.row_stack((nseams, np.insert(seams[row], seam[row]+1, 0)))
+        #seams = nseams
+            
 
     if axis == 0:
         out = np.transpose(out, (1, 0, 2))
@@ -433,7 +502,37 @@ def compute_forward_cost(image, energy):
     paths[0] = 0  # we don't care about the first row of paths
 
     ### YOUR CODE HERE
-    pass
+    for r in range(1, H):
+        for c in range(W):
+            if c > 0 and c < W-1:
+                m_L = cost[r-1, c-1] 
+                c_L = np.abs(image[r-1, c] - image[r, c-1]) + np.abs(image[r, c+1] - image[r, c-1])
+                m_R = cost[r-1, c+1]
+                c_R = np.abs(image[r-1, c] - image[r, c+1]) + np.abs(image[r, c+1] - image[r, c-1])
+                c_M = np.abs(image[r, c+1] - image[r, c-1]) 
+                
+            elif c == 0:
+                m_L = float('inf')
+                c_L = float('inf')
+                m_R = cost[r-1, c+1]
+                c_R = np.abs(image[r-1, c] - image[r, c+1])
+                c_M = 0
+            elif c == W-1:
+                m_R = float('inf')
+                c_R = float('inf')
+                m_L = cost[r-1, c-1] 
+                c_L = np.abs(image[r-1, c] - image[r, c-1])
+                c_M = 0
+                
+            m_M = cost[r-1, c]
+            L = c_L + m_L
+            R = c_R + m_R
+            M = c_M + m_M
+            
+            cost[r, c] = energy[r, c] + min(L, M, R)
+            paths[r, c] = np.argmin((L, M, R)) - 1
+                                      
+                                      
     ### END YOUR CODE
 
     # Check that paths only contains -1, 0 or 1

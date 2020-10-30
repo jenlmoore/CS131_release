@@ -84,14 +84,13 @@ def kmeans_fast(features, k, num_iters=100):
     assignments = np.zeros(N, dtype=np.uint32)
 
     for n in range(num_iters):
-        ### make element wise comparable
-        rptfeature = np.tile(features, (k, 1))
-        rptcenter = np.repeat(centers, N, axis=0)
+        dists = cdist(features, centers, 'euclidean')
+        assignments = np.argmin(dists, axis=1)
         
-        assignments = np.argmin(np.sum((rptfeature - rptcenter)**2, axis=1).reshape(k, N), axis=0)
         prevCenter = np.copy(centers)
         for c in range(k):
             centers[c] = np.mean(features[assignments == c], axis=0)
+        #if equal
         if np.allclose(prevCenter, centers):
             break
 
@@ -146,18 +145,15 @@ def hierarchical_clustering(features, k):
     n_clusters = N
 
     while n_clusters > k:
-        distances = ((centers.reshape(-1, 1, D) - centers.reshape(1, -1, D)) ** 2).sum(axis=-1)
-        distances[distances==0] = float('inf')
-        minDist = np.argmin(distances)
+        distances = squareform(pdist(centers))
+        np.fill_diagonal(distances, float('inf'))
+        #gets 2 smallest
+        min1, min2 = np.unravel_index(np.argmin(distances), distances.shape)
         
-        #newcluster
-        min1 = minDist // n_clusters
-        #old
-        min2 = minDist - min1 * n_clusters
-        
-        #just in case other case
-        if min2 < min1:
-            min1, min2 = min2, min1
+        #make sure we use bigger one as min2
+        min1 = min(min1, min2)
+        min2 = max(min1, min2)
+
         assignments[assignments == min2] = min1
         assignments[assignments > min2] -= 1
         
@@ -214,7 +210,7 @@ def color_position_features(img):
     #sets color
     features[:, 0 : C] = color.reshape(H*W, C)
     #puts in locations
-    locations = np.dstack(np.mgrid[0 : H, 0 : W]).reshape((H*W, 2))
+    locations = np.dstack(np.mgrid[0:H, 0:W]).reshape((H*W, 2))
     features[:, C : C + 2] = locations
     
     features = (features - np.mean(features, axis=0)) / np.std(features, axis=0)
@@ -256,7 +252,7 @@ def compute_accuracy(mask_gt, mask):
     accuracy = None
     ### YOUR CODE HERE
     H, W = mask_gt.shape
-    #just divide num where they equal by total num
+    #just divide num where they equal by total num, simple avg formula
     accuracy = np.sum(mask_gt == mask) / (H * W)
 
     return accuracy
