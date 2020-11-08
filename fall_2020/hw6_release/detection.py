@@ -24,7 +24,8 @@ def hog_feature(image, pixel_per_cell=8):
         hog_image: an image representation of hog provided by skimage.
     """
     ### YOUR CODE HERE
-    pass
+    tup = (pixel_per_cell, pixel_per_cell)
+    hog_feature, hog_image = feature.hog(image, pixels_per_cell = tup, block_norm='L1',visualize=True)
     ### END YOUR CODE
     return (hog_feature, hog_image)
 
@@ -72,7 +73,12 @@ def sliding_window(image, template_feature, step_size, window_size, pixel_per_ce
         for c in range(0, W, step_size):
             score = 0
             ### YOUR CODE HERE
-            pass
+            img_feature, pic = hog_feature(pad_image[r: r + window_size[0], c:c + window_size[1]], pixel_per_cell)
+            score = np.dot(img_feature, template_feature)
+            if score > max_score:
+                max_score = score
+                maxr = r
+                maxc = c
             ### END YOUR CODE
             response_map[(r) // step_size, (c) // step_size] = score
 
@@ -112,7 +118,9 @@ def pyramid(image, scale=0.9, min_size=(200, 100)):
     while True:
         # Use "break" to exit this loop when termination conditions are met.
         ### YOUR CODE HERE
-        pass
+        if image.shape[0] < min_size[0] or image.shape[1] < min_size[1]:
+            images.pop()
+            break
         ### END YOUR CODE
 
         # Compute the new dimensions of the image and resize it
@@ -150,7 +158,15 @@ def pyramid_score(image, template_feature, shape, step_size=20,
 
     images = pyramid(image, scale)
     ### YOUR CODE HERE
-    pass
+    for i in images:
+        (i_score, ir, ic, i_map_resized) = sliding_window(i[1], template_feature, step_size, shape, pixel_per_cell)
+        if i_score >= max_score:
+            max_score = i_score
+            maxr = ir
+            maxc = ic
+            max_scale = i[0]
+            max_response_map = i_map_resized
+            
     ### END YOUR CODE
     return max_score, maxr, maxc, max_scale, max_response_map
 
@@ -182,7 +198,14 @@ def compute_displacement(part_centers, face_shape):
     """
     d = np.zeros((part_centers.shape[0], 2))
     ### YOUR CODE HERE
-    pass
+    img_center = (face_shape[0] / 2, face_shape[1] / 2)
+    for c in range(part_centers.shape[0]):
+        x = img_center[0] - part_centers[c, 0]
+        y = img_center[1] - part_centers[c, 1]
+        d[c] = (x, y)
+        
+    mu = np.mean(d, axis=0)
+    sigma = np.std(d, axis=0)
     ### END YOUR CODE
     return mu, sigma
 
@@ -208,7 +231,8 @@ def shift_heatmap(heatmap, mu):
     """
     ### YOUR CODE HERE
     heatmap = np.copy(heatmap)
-    pass
+    new_heatmap = heatmap / np.max(heatmap)
+    new_heatmap = interpolation.shift(new_heatmap, mu)
     ### END YOUR CODE
     return new_heatmap
 
@@ -237,7 +261,14 @@ def gaussian_heatmap(heatmap_face, heatmaps, sigmas):
     heatmaps = list(np.copy(heatmaps))
     sigmas = list(np.copy(sigmas))
     ### YOUR CODE HERE
-    pass
+    heatmap = 0
+    for m in range(len(heatmaps)):
+        heatmap += gaussian(heatmaps[m], sigmas[m])
+    heatmap += heatmap_face
+    
+    idx = np.unravel_index(heatmap.argmax(), (heatmap.shape))
+    maxr = idx[0]
+    maxc = idx[1]
     ### END YOUR CODE
     return heatmap, maxr, maxc
 

@@ -27,8 +27,15 @@ def compute_distances(X1, X2):
     #
     # HINT: Try to formulate the l2 distance using matrix multiplication
 
-    pass
-    # END YOUR CODE
+    # distance is ||X1-X2|| but bc we know the X1 and X2 are normalized:
+    # we can use linear algebra :) to make more doable
+    # sum of 3 seperate matricies
+ 
+    anorms = np.sum(X1**2, axis=1).reshape((M, 1))
+    bnorms = np.sum(X2**2, axis=1).T.reshape((1, N))
+    
+    transp = -2 * np.dot(X1, X2.T)
+    dists = np.sqrt(anorms + transp + bnorms)
 
     assert dists.shape == (M, N), "dists should have shape (M, N), got %s" % dists.shape
 
@@ -62,7 +69,17 @@ def predict_labels(dists, y_train, k=1):
     # Hint: Look up the functions numpy.argsort and numpy.bincount
 
     # YOUR CODE HERE
-    pass
+    for i in range(dists.shape[0]):
+        #k nearest indices
+        nearestIdx = np.argsort(dists[i])[:k]
+        klabel = y_train[nearestIdx]
+        
+        #which label is most common
+        counts = np.bincount(klabel)
+        #gets most common label name bc bincount's indicies are the actual values of klabels
+        common = np.argmax(counts)
+        
+        y_pred[i] = common
     # END YOUR CODE
 
     return y_pred
@@ -112,7 +129,24 @@ def split_folds(X_train, y_train, num_folds):
 
     # YOUR CODE HERE
     # Hint: You can use the numpy array_split function.
-    pass
+    
+    X_vals = np.asarray((np.array_split(X_train, num_folds)), dtype=np.float)
+    y_vals = np.asarray((np.array_split(y_train, num_folds)))
+    for i in range(num_folds):
+        
+        if i != num_folds -1 and i != 0:
+            xbeg = np.vstack((X_vals[:i]))
+            xend = np.vstack((X_vals[i+1:]))
+            X_trains[i] = np.vstack((xbeg, xend))
+            ybeg = np.hstack((y_vals[:i]))
+            yend = np.hstack((y_vals[i+1:]))
+            y_trains[i] = np.hstack((ybeg, yend))
+        elif i == 0:
+            X_trains[i] = np.vstack((X_vals[i+1:]))
+            y_trains[i] = np.hstack((y_vals[i+1:]))
+        else:
+            X_trains[i] = np.vstack((X_vals[:i]))
+            y_trains[i] = np.hstack((y_vals[:i]))
     # END YOUR CODE
 
     return X_trains, y_trains, X_vals, y_vals
