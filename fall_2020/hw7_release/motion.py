@@ -46,10 +46,15 @@ def lucas_kanade(img1, img2, keypoints, window_size=5):
         # In order to achieve more accurate results, image brightness at subpixel
         # locations can be computed using bilinear interpolation.
         y, x = int(round(y)), int(round(x))
-
-        ### YOUR CODE HERE
-        pass
-        ### END YOUR CODE
+        Ay = Iy[y-w: y+w+1, x-w: x+w+1].reshape(window_size **2, 1)
+        Ax = Ix[y-w: y+w+1, x-w: x+w+1].reshape(window_size **2, 1)
+        A = np.hstack((Ay, Ax))
+        inv = np.linalg.inv(np.dot(A.T, A))
+        b = -1 * It[y-w: y+w+1, x-w: x+w+1].reshape(window_size **2, 1)
+        v = np.dot(np.dot(inv, A.T), b).flatten()
+        #need shape (1, 2)
+        flow_vectors.append(v)
+        
 
     flow_vectors = np.array(flow_vectors)
 
@@ -90,9 +95,12 @@ def iterative_lucas_kanade(img1, img2, keypoints, window_size=9, num_iters=7, g=
         y1 = int(round(y))
         x1 = int(round(x))
 
-        # TODO: Compute inverse of G at point (x1, y1)
+        # TODO: Compute inverse of G at point (x1, y1); edit (y1, x1)
         ### YOUR CODE HERE
-        pass
+        Ay = Iy[y1-w: y1+w+1, x1-w: x1+w+1]
+        Ax = Ix[y1-w: y1+w+1, x1-w: x1+w+1]
+        G = np.array([[np.sum(Ax**2), np.sum(Ay*Ax)], [np.sum(Ay*Ax), np.sum(Ay**2)]])
+        Ginv = np.linalg.inv(G)
         ### END YOUR CODE
 
         # Iteratively update flow vector
@@ -104,7 +112,10 @@ def iterative_lucas_kanade(img1, img2, keypoints, window_size=9, num_iters=7, g=
 
             # TODO: Compute bk and vk = inv(G) x bk
             ### YOUR CODE HERE
-            pass
+            Ik = img1[y1-w: y1+w+1, x1-w: x1+w+1] - img2[y2-w: y2+w+1, x2-w: x2+w+1]
+            bk = np.array([[np.sum(Ik*Ax)], [np.sum(Ik*Ay)]])
+            vk = np.dot(Ginv, bk)[:, 0]
+            #print(v.shape)
             ### END YOUR CODE
 
             # Update flow vector by vk
@@ -142,12 +153,19 @@ def pyramid_lucas_kanade(
 
     # Initialize pyramidal guess
     g = np.zeros(keypoints.shape)
-
+    
     for L in range(level, -1, -1):
         ### YOUR CODE HERE
-        pass
+        lScale = scale ** L
+        newkeys = keypoints / lScale
+        img1 = pyramid1[L]
+        img2 = pyramid2[L]
+        d = iterative_lucas_kanade(img1, img2, newkeys, window_size, num_iters, g)
+        #g is really g-1 now bc just gets reused, dont need another variable, after for loop g = g0, same w d
+        if L - 1 >= 0:
+            g = scale * (g + d)
         ### END YOUR CODE
-
+    
     d = g + d
     return d
 
@@ -167,7 +185,10 @@ def compute_error(patch1, patch2):
     assert patch1.shape == patch2.shape, "Different patch shapes"
     error = 0
     ### YOUR CODE HERE
-    pass
+    p1norm = (patch1 - np.mean(patch1)) / np.std(patch1)
+    p2norm = (patch2 - np.mean(patch2)) / np.std(patch2)
+    
+    error = np.mean((p1norm - p2norm)**2)
     ### END YOUR CODE
     return error
 
@@ -258,7 +279,15 @@ def IoU(bbox1, bbox2):
     score = 0
 
     ### YOUR CODE HERE
-    pass
+    leftIntBox = max(x1, x2)
+    rightIntBox = min(x1 + w1, x2 + w2)
+    topIntBox = max(y1, y2)
+    bottomIntBox = min(y1 + h1, y2 + h2)
+    
+    
+    intersection = (rightIntBox - leftIntBox) * (bottomIntBox - topIntBox)
+    union = w1 * h1 + w2 * h2
+    score = intersection / (union - intersection)
     ### END YOUR CODE
 
     return score
